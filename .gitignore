@@ -1,0 +1,17 @@
+venv
+data/raw/*
+data/processed/*
+
+*.pt
+*.bin
+*.safetensors
+*.h5
+
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+
+.vscode/
+.env
