@@ -5,11 +5,11 @@ from pathlib import Path
 # Path() converts to Path object (to work with it further)
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-RAW_DATA_PATH = BASE_DIR / "data" / "raw" / "german_credit_data.csv"
+RAW_DATA_PATH = BASE_DIR / "data" / "raw" / "adult.csv"
 PROCESSED_DATA_PATH = BASE_DIR / "data" / "processed" / "cleaned_data.csv"
 
-ZERO_SHOT_MODEL = "facebook/bart-largemnli"
-SENSITIVITY_CANDIDATES = [
+ZERO_SHOT_MODEL = "facebook/bart-large-mnli"
+SENSITIVE_CANDIDATE_LABELS = [
     "sensitive demographic information", 
     "protected class", 
     "personal identity",
