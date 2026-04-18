@@ -1,17 +1,35 @@
-venv
-data/raw/*
-data/processed/*
-
-*.pt
-*.bin
-*.safetensors
-*.h5
-
+# ==========================================
+# PYTHON & ENVIRONMENTS
+# ==========================================
 venv/
 env/
 __pycache__/
 *.py[cod]
 *$py.class
 
+# ==========================================
+# DATA (Never push raw or processed clinical data)
+# ==========================================
+data/raw/*
+data/processed/*
+
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+*.joblib
+*.pt
+*.bin
+*.safetensors
+*.h5
+
+models/*
+!models/.gitkeep
+
+reports/figures/*
+!reports/figures/.gitkeep
+
 .vscode/
 .env
+.DS_Store
+Thumbs.db
+tempCodeRunnerFile.*
