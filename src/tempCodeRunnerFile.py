@@ -6,8 +6,8 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from src import config
 from src.data_ingestion.loader import TCGALoader
+from src.detection.nlp_scanner import ZeroShotScanner
 from src.detection.proxy_detector import ProxyDetector
-from src.detection.nlp_scanner import ClinicalDemographicScanner
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -25,13 +25,14 @@ def run_phase_1():
 
     clinical_columns = [col for col in df.columns if not col.startswith('ENSG')]
     
-    for col in clinical_columns:
-        if df[col].dtype == 'object' or df[col].dtype == 'bool':
-            df[col] = df[col].astype(str)
-
     logger.info(f"Extracted {len(clinical_columns)} clinical/metadata columns for fairness scanning.")
 
-    scanner = ClinicalDemographicScanner()
+    scanner = ZeroShotScanner(
+        model_name=config.ZERO_SHOT_MODEL, 
+        candidate_labels=config.SENSITIVE_CANDIDATE_LABELS,
+        threshold=config.SENSITIVITY_THRESHOLD
+    )
+    
     sensitive_columns = scanner.scan_columns(clinical_columns)
     
     if not sensitive_columns:

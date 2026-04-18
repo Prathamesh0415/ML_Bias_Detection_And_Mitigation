@@ -1,0 +1,5 @@
+Why dropping duplicates ?
+
+TCGA barcodes are hierarchical. A full barcode looks like TCGA-A1-A0SB-01A-11R-A144-07.
+The first 12 characters (TCGA-A1-A0SB) represent the Patient.
+The 13th-15th characters (-01A) represent the Sample (e.g., 01 means primary solid tumor, A means the first vial).

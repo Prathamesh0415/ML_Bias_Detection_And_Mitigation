@@ -1,22 +1,13 @@
 import os
 from pathlib import Path
 
-# __file__ -> this contains the string path of the current file
-# Path() converts to Path object (to work with it further)
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-RAW_DATA_PATH = BASE_DIR / "data" / "raw" / "adult.csv"
-PROCESSED_DATA_PATH = BASE_DIR / "data" / "processed" / "cleaned_data.csv"
+RAW_DATA_DIR = BASE_DIR / "data" / "raw"
+CLINICAL_PATH = RAW_DATA_DIR / "TCGA.BRCA.sampleMap_BRCA_clinicalMatrix"
+SURVIVAL_PATH = RAW_DATA_DIR / "DATASET2.txt"
+TPM_PATH = RAW_DATA_DIR / "TCGA-BRCA.star_tpm.tsv" 
 
-ZERO_SHOT_MODEL = "facebook/bart-large-mnli"
-SENSITIVE_CANDIDATE_LABELS = [
-    "sensitive demographic information", 
-    "protected class", 
-    "personal identity",
-    "financial transaction"
-]
-
-SENSITIVITY_THRESHOLD = 0.65
+PROCESSED_DATA_PATH = BASE_DIR / "data" / "processed" / "tcga_brca_merged.parquet"
 
 PROXY_RANDOM_STATE = 42
-
