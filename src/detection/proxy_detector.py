@@ -2,7 +2,7 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
-from sklearn.metrics import r2_score, accuracy_score
+from sklearn.metrics import r2_score, accuracy_score, balanced_accuracy_score
 import logging
 
 logger = logging.getLogger(__name__)
@@ -15,31 +15,61 @@ class ProxyDetector:
         """ Function to detect proxy variables (features that induce bias when sensitive columns are removed) """ 
         proxy_results = {}
         
-        # Preprocess categorical data for the tree models
+        # 1. Encode nominal text/bool data
         df_encoded = df.copy()
         encoders = {}
-        for col in df_encoded.select_dtypes(include=['object']).columns:
+        # Ensure we catch both object and bool types
+        for col in df_encoded.select_dtypes(include=['object', 'bool']).columns:
             encoders[col] = LabelEncoder()
-            df_encoded[col] = encoders[col].fit_transform(df_encoded[col].fillna("Missing"))
-
-        df_encoded = df_encoded.fillna(df_encoded.median())
+            # Cast to string first to prevent mixed-type errors
+            df_encoded[col] = encoders[col].fit_transform(df_encoded[col].astype(str).fillna("Missing"))
 
         for target_col in sensitive_cols:
             logger.info(f"\nAnalyzing potential proxies for sensitive attribute: '{target_col}'")
 
-            X = df_encoded.drop(columns=sensitive_cols)
-            y = df_encoded[target_col]
+            # --- ADD THIS FIX BLOCK ---
+            # Drop rows where the target variable is NaN. We cannot predict a missing target.
+            df_target = df_encoded.dropna(subset=[target_col]).copy()
             
+            # Failsafe: If a column was entirely empty, skip it so the pipeline doesn't crash
+            if df_target.empty:
+                logger.warning(f"All values for '{target_col}' are missing. Skipping.")
+                continue
+            
+            # Isolate features and target using the cleaned subset
+            X = df_target.drop(columns=sensitive_cols)
+            y = df_target[target_col]
+            # --------------------------
+            
+            # 2. Split BEFORE imputation to prevent data leakage
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=self.random_state)
+            
+            # 3. Calculate median ONLY on the training set, then apply to both
+            train_medians = X_train.median()
+            X_train = X_train.fillna(train_medians)
+            X_test = X_test.fillna(train_medians)
 
-            if df[target_col].dtype == 'object' or len(df[target_col].unique()) < 10:
-                model = RandomForestClassifier(random_state=self.random_state)
+            is_categorical = df[target_col].dtype == 'object' or len(df[target_col].unique()) < 10
+
+            if is_categorical:
+                # 4. Added class_weight='balanced' to penalize ignoring minority classes 
+                # 5. Added n_jobs=-1 to parallelize tree building
+                model = RandomForestClassifier(
+                    random_state=self.random_state, 
+                    class_weight='balanced', 
+                    n_jobs=-1
+                )
                 model.fit(X_train, y_train)
                 preds = model.predict(X_test)
-                score = accuracy_score(y_test, preds)
-                metric = "Accuracy"
+                
+                # 6. Use Balanced Accuracy to reveal true predictive power
+                score = balanced_accuracy_score(y_test, preds)
+                metric = "Balanced Accuracy"
             else:
-                model = RandomForestRegressor(random_state=self.random_state)
+                model = RandomForestRegressor(
+                    random_state=self.random_state, 
+                    n_jobs=-1
+                )
                 model.fit(X_train, y_train)
                 preds = model.predict(X_test)
                 score = r2_score(y_test, preds)

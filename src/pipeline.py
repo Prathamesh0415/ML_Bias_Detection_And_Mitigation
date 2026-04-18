@@ -33,14 +33,20 @@ def run_phase_1():
 
     scanner = ClinicalDemographicScanner()
     sensitive_columns = scanner.scan_columns(clinical_columns)
-    
+
     if not sensitive_columns:
-        logger.info("No sensitive columns detected by NLP scanner.")
-    else:
-        logger.info(f"Sensitive columns moving to proxy detection: {sensitive_columns}")
-        detector = ProxyDetector(random_state=config.PROXY_RANDOM_STATE)
+        logger.warning("Scanner found no sensitive columns. Defaulting to standard demographic targets.")
+
+        fallback_targets = ['gender', 'age_at_initial_pathologic_diagnosis', 'menopause_status', 'race']
         
-        proxy_report = detector.detect_proxies(df[clinical_columns], sensitive_columns)
+        sensitive_columns = [col for col in fallback_targets if col in df.columns]
+        
+    logger.info(f"Sensitive columns moving to proxy detection: {sensitive_columns}")
+    
+
+    detector = ProxyDetector(random_state=config.PROXY_RANDOM_STATE)
+    proxy_report = detector.detect_proxies(df[clinical_columns], sensitive_columns)
+    # -----------------------------------------------
     
     logger.info("\n=== Phase 1 Execution Complete ===")
     logger.info("Ready for Phase 2 (Dimensionality Reduction & Mitigation).")
