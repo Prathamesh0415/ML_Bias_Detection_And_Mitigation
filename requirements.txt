@@ -1,9 +1,11 @@
 pandas
 numpy
+pyarrow
+xlrd
+openpyxl
 scikit-learn
-xgboost
+joblib
+torch
 aif360
 shap
-transformers
-torch
 matplotlib
