@@ -3,17 +3,17 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-class ClinicalDemographicScanner:
+class DemographicScanner:
     def __init__(self):
-        # A robust list of regex patterns that catch standard demographic terminology
+        # Updated regex patterns to catch standard demographic and financial targets
         self.sensitive_patterns = [
             r'race', r'ethnicity', r'gender', r'sex', 
-            r'age', r'birth', r'menopause', r'ancestry',
-            r'marital', r'education', r'income', r'insurance'
+            r'age', r'birth', r'marri', r'marital', # 'marri' catches 'marriage'
+            r'education', r'income', r'insurance', r'dependents', r'family'
         ]
         
     def scan_columns(self, columns: list) -> list:
-        logger.info("Scanning clinical metadata for demographic variables...")
+        logger.info("Scanning metadata for sensitive demographic variables...")
         sensitive_cols = set()
         
         for col in columns:

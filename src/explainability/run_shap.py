@@ -28,45 +28,44 @@ def generate_shap_explanations():
     logger.info("Calculating SHAP values using the Modern API...")
     explainer = shap.TreeExplainer(model)
     
-    # --- THE MODERN SHAP API FIX ---
-    # Calling the explainer directly creates a strict 'Explanation' object.
-    # This prevents the buggy legacy function from making interaction grids.
+    # Modern SHAP API
     explanation = explainer(X_sample)
     
-    # Random Forest returns explanations for both survival (1) and death (0).
-    # We slice the Explanation object to isolate class 1.
-    # Shape is usually (samples, features, classes), so we take [:, :, 1]
+    # Random Forest returns explanations for both classes (0 = Paid, 1 = Default).
+    # We slice to isolate class 1 (Default).
     if len(explanation.shape) == 3:
-        surv_explanation = explanation[:, :, 1]
+        default_explanation = explanation[:, :, 1]
     else:
-        surv_explanation = explanation
+        default_explanation = explanation
 
     reports_dir = config.REPORTS_DIR
     reports_dir.mkdir(parents=True, exist_ok=True)
     
+    # --- DYNAMIC FEATURE COUNT ---
+    # Gets the exact number of features (23) so SHAP plots everything
+    total_features = X_sample.shape[1]
+    
     # ---------------------------------------------------------
     # PLOT 1: The Global Importance Bar Chart
     # ---------------------------------------------------------
-    logger.info("Generating SHAP Bar Chart...")
-    plt.figure(figsize=(10, 6))
+    logger.info(f"Generating SHAP Bar Chart for all {total_features} features...")
+    plt.figure(figsize=(10, 8)) # Increased height slightly so labels don't crowd
     
-    # Using shap.plots.bar instead of the legacy summary_plot
-    shap.plots.bar(surv_explanation, max_display=15, show=False)
+    shap.plots.bar(default_explanation, max_display=total_features, show=False)
     
-    plt.title("Top 15 Most Important Features (Baseline RF)")
+    plt.title("All Features Importance (Baseline RF - Default Prediction)")
     plt.savefig(reports_dir / "shap_bar_baseline.png", bbox_inches='tight', dpi=300)
     plt.clf() 
     
     # ---------------------------------------------------------
     # PLOT 2: The Focused Beeswarm Plot
     # ---------------------------------------------------------
-    logger.info("Generating SHAP Beeswarm Plot...")
-    plt.figure(figsize=(10, 8))
+    logger.info(f"Generating SHAP Beeswarm Plot for all {total_features} features...")
+    plt.figure(figsize=(12, 10)) # Increased height for full feature list
     
-    # Using shap.plots.beeswarm strictly forces the dot plot layout
-    shap.plots.beeswarm(surv_explanation, max_display=15, show=False)
+    shap.plots.beeswarm(default_explanation, max_display=total_features, show=False)
     
-    plt.title("SHAP Beeswarm: Impact on Survival Prediction")
+    plt.title("SHAP Beeswarm: Impact on Credit Default Risk")
     plt.savefig(reports_dir / "shap_beeswarm_baseline.png", bbox_inches='tight', dpi=300)
     plt.close() 
 
