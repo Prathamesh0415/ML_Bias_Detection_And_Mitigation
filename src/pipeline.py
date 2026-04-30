@@ -29,13 +29,37 @@ def run_pipeline():
     logger.info("=====================================================\n")
 
     # =================================================================
-    # PHASE 1, 2 & 3: DATA, BASELINE & SHAP
+    # PHASE 1: DATA INGESTION
     # =================================================================
     loader = CreditDataLoader(data_path=config.CREDIT_DATA_PATH, processed_path=config.PROCESSED_DATA_PATH)
     df = loader.load_and_clean()
 
-    # Skip scanning to save time in the final run, we know the proxies
-    logger.info("=== Phase 2 & 3: Baseline Training & SHAP ===")
+    # =================================================================
+    # PHASE 1.5: DEMOGRAPHIC SCANNING & PROXY DETECTION
+    # =================================================================
+    logger.info("=== Phase 1.5: Demographic Scanning & Proxy Detection ===")
+    scanner = DemographicScanner()
+    # Scan columns to find sensitive attributes like 'sex', 'age', 'marriage'
+    sensitive_cols = scanner.scan_columns(df.columns.tolist())
+    logger.info(f"Detected Sensitive Columns: {sensitive_cols}")
+
+    if sensitive_cols:
+        detector = ProxyDetector(random_state=42)
+        proxy_results = detector.detect_proxies(df, sensitive_cols)
+        
+        logger.info("\n--- PROXY DETECTION SUMMARY ---")
+        for target, data in proxy_results.items():
+            logger.info(f"Target: '{target}' | Prediction {data['metric']}: {data['score']:.4f}")
+            logger.info(f"Top 3 Proxies masking as '{target}':")
+            for proxy in data['top_proxies']:
+                logger.info(f"  -> {proxy['Feature']} (Importance Weight: {proxy['Importance']:.4f})")
+    else:
+        logger.info("No sensitive columns detected. Skipping Proxy Detection.")
+
+    # =================================================================
+    # PHASE 2 & 3: BASELINE & SHAP
+    # =================================================================
+    logger.info("\n=== Phase 2 & 3: Baseline Training & SHAP ===")
     train_and_save_baseline(df)
     generate_shap_explanations()
 
@@ -53,7 +77,6 @@ def run_pipeline():
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
     # --- PREPARE AGE FOR EVALUATION ---
-    # We create a temporary DataFrame for evaluation so we don't mess up the 23 features the ML models expect
     X_test_eval = X_test.copy()
     X_test_eval['age_binary'] = (X_test_eval['age'] >= 30).astype(int) # 1 = Privileged (>=30), 0 = Unprivileged (<30)
 
@@ -68,28 +91,48 @@ def run_pipeline():
     baseline_preds = baseline_model.predict(X_test)
     logger.info(f"Baseline Accuracy: {accuracy_score(y_test, baseline_preds):.4f}")
     
-    # Check both Gender and Age Bias
     evaluate_aif360_fairness("Baseline RF (SEX)", y_test, baseline_preds, X_test, protected_col='sex', privileged_val=1, unprivileged_val=2)
     evaluate_aif360_fairness("Baseline RF (AGE)", y_test, baseline_preds, X_test_eval, protected_col='age_binary', privileged_val=1, unprivileged_val=0)
 
     # ---------------------------------------------------------
-    # SHOWDOWN 2: ROUTE A (AIF360 REWEIGHING)
+    # SHOWDOWN 2: ROUTE A (AIF360 REWEIGHING - INTERSECTIONAL)
     # ---------------------------------------------------------
-    logger.info("\n--- EVALUATING ROUTE A (AIF360) ---")
-    # AIF360 handles one primary attribute smoothly. We will let it fix 'sex'.
-    aif_model = train_aif360_baseline(X_train, y_train, protected_col='sex', privileged_val=1, unprivileged_val=2)
-    aif_preds = aif_model.predict(X_test)
+    logger.info("\n--- EVALUATING ROUTE A (AIF360 INTERSECTIONAL) ---")
     
-    logger.info(f"AIF360 Accuracy: {accuracy_score(y_test, aif_preds):.4f}")
-    evaluate_aif360_fairness("AIF360 (SEX)", y_test, aif_preds, X_test, protected_col='sex', privileged_val=1, unprivileged_val=2)
-    evaluate_aif360_fairness("AIF360 (AGE)", y_test, aif_preds, X_test_eval, protected_col='age_binary', privileged_val=1, unprivileged_val=0)
+    def assign_privilege(row):
+        if row['sex'] == 1 and row['age'] >= 30:
+            return 1 # Privileged (Older Men)
+        else:
+            return 0 # Unprivileged (All other intersecting groups)
 
+    X_train = X_train.copy()
+    X_test = X_test.copy()
+    X_test_eval = X_test_eval.copy()
+    
+    X_train['intersectional_protected'] = X_train.apply(assign_privilege, axis=1)
+    X_test['intersectional_protected'] = X_test.apply(assign_privilege, axis=1)
+    X_test_eval['intersectional_protected'] = X_test_eval.apply(assign_privilege, axis=1)
+
+    aif_model_combined = train_aif360_baseline(
+        X_train, 
+        y_train, 
+        protected_col='intersectional_protected', 
+        privileged_val=1, 
+        unprivileged_val=0
+    )
+    
+    aif_preds_combined = aif_model_combined.predict(X_test)
+
+    logger.info(f"AIF360 Intersectional Accuracy: {accuracy_score(y_test, aif_preds_combined):.4f}")
+    
+    evaluate_aif360_fairness("AIF360 Combined Model (Eval on SEX)", y_test, aif_preds_combined, X_test, protected_col='sex', privileged_val=1, unprivileged_val=2)
+    evaluate_aif360_fairness("AIF360 Combined Model (Eval on AGE)", y_test, aif_preds_combined, X_test_eval, protected_col='age_binary', privileged_val=1, unprivileged_val=0)
+    
     # ---------------------------------------------------------
-    # SHOWDOWN 3: ROUTE B (PYTORCH INTERSECTIONAL)
+    # SHOWDOWN 3: ROUTE B (PYTORCH ADVERSARIAL)
     # ---------------------------------------------------------
     logger.info("\n--- EVALUATING ROUTE B (PYTORCH ADVERSARIAL) ---")
     
-    # We pass BOTH Sex and Age to the Adversarial network to cure both simultaneously!
     protected_train_pt = pd.DataFrame()
     protected_train_pt['sex'] = X_train['sex'] - 1  # 0=Male, 1=Female
     protected_train_pt['age_binary'] = (X_train['age'] < 30).astype(int) # 0=Older, 1=Younger
